@@ -11,22 +11,19 @@ from direct.showbase import Audio3DManager
 import simplepbr
 from math import sin, cos, pi
 
-#Things to ADD:
-#Remaining Eggs (2/7)
-
 
 class gameEngine(ShowBase):
     def __init__(self):
         ShowBase.__init__(self)
         simplepbr.init()
         
-        self.gravity = 10
+        self.gravity = 20
         self.p_speed = 10
         self.camera_speed = 20
         self.last_time = 0
         self.lock = True
         self.jump_v = 0
-        self.jump_h = 5
+        self.jump_h = 10
         self.score = 0
         self.egg_sounds = {}
         
@@ -36,12 +33,14 @@ class gameEngine(ShowBase):
         self.cam_y_pos = base.win.getYSize() // 2
         
         #magic numbers
-        box_space = 400
-        boundry_floor = 10
+        #old numbers:
+            #box_space: 400
+            #boundry_floor: 10
+        
+        box_space = 1000
+        boundry_floor = 50
         boy_radius = 1
         self.dead_zone = 0.01
-        
-        
         
         self.props = WindowProperties()
         self.props.setCursorHidden(self.lock)
@@ -80,25 +79,24 @@ class gameEngine(ShowBase):
         
         
         #Load world
-        scene = self.loader.loadModel('world.bam')
+        scene = self.loader.loadModel('worlds/smw_island.bam')
         
         eggs = scene.findAllMatches('**/=Egg')
         colliders = scene.findAllMatches('**/+CollisionNode')
-        
-        
+        hiders = scene.findAllMatches('**/=remove')
         
         for collider in colliders:
             realNode = collider.parent
             for child in collider.children:
                 child.reparentTo(realNode)
             collider.hide()
-        
-        # for collider in hide_list:
-            # collider.hide()
             
         for egg in eggs:
             self.accept('playerCol-into-' + egg.name, self.collect_egg)
             self.egg_sounds[egg.name] = base.loader.loadSfx(egg.getTag('Egg') + '.mp3')
+            
+        for node in hiders:
+            node.removeNode()
           
         #For some reason I need to store the model path in order to keep this working
         #Lol lmao
@@ -125,9 +123,12 @@ class gameEngine(ShowBase):
         playerColNode.addSolid(legs)
         playerColNode.setFromCollideMask(BitMask32(0x01))
         playerColPath = self.playerPath.attachNewNode(playerColNode)
-        playerColPath.setCollideMask(BitMask32(0x01))  
+        playerColPath.setCollideMask(BitMask32(0x01)) 
         
-        playerColPath.show()
+        #playerColPath.show()
+        
+        self.camera_center = self.playerPath.attachNewNode(PandaNode('camera_spot'))
+        
         
         feet = CollisionSphere(0,0,-3, boy_radius/2)
         feetColNode = CollisionNode('playerFeet')
@@ -137,9 +138,9 @@ class gameEngine(ShowBase):
         playerFeet = self.playerPath.attachNewNode(feetColNode)
         playerFeet.setCollideMask(BitMask32(0x02))
         
-        playerFeet.show()
+        #playerFeet.show()
         
-        self.playerPath.setPos(5,5,5)
+        self.playerPath.setPos(0,0,0)
 
         pusher.addCollider(playerColPath, self.playerPath)
         traverser.addCollider(playerColPath, pusher)
@@ -158,11 +159,11 @@ class gameEngine(ShowBase):
         self.accept('r', self.p_restart)
         
         #Camera setup
-        self.camera.reparentTo(self.playerPath)
+        self.camera.reparentTo(self.camera_center)
         base.disableMouse()        
         self.accept('escape', self.swich_lock)
         base.win.movePointer(0, int(base.win.getXSize() / 2), int(base.win.getYSize() / 2))
-        self.camera.setPos(0,-boy_radius,0)
+        self.camera.setPos(0,-(boy_radius * 2),0)
 
         #Setup frame_update
         taskMgr.add(self.frame_update, 'frame_update')
@@ -223,7 +224,8 @@ class gameEngine(ShowBase):
                 base.win.movePointer(0, base.win.getXSize() // 2, base.win.getYSize() // 2)
     
         
-        angle = (self.playerPath.getH() / 360) * 2 * pi
+        #angle = (self.playerPath.getH() / 360) * 2 * pi
+        angle = (self.camera_center.getH() / 360) * 2 * pi
         
 
         actual_x = -(sin(angle) * y_speed)
@@ -237,7 +239,8 @@ class gameEngine(ShowBase):
             actual_y *= 2
 
         self.playerPath.setFluidPos(self.playerPath.getX() + actual_x, self.playerPath.getY() + actual_y, self.playerPath.getZ() + z_speed)
-        self.playerPath.setHpr(self.playerPath.getH() + camera_x, self.playerPath.getP() + camera_y, self.playerPath.getR())
+        #self.playerPath.setHpr(self.playerPath.getH() + camera_x, self.playerPath.getP() + camera_y, self.playerPath.getR())
+        self.camera_center.setHpr(self.camera_center.getH() + camera_x, self.camera_center.getP() + camera_y, self.camera_center.getR())
 
         self.last_time = task.time
         return task.cont
@@ -253,7 +256,7 @@ class gameEngine(ShowBase):
         base.win.requestProperties(self.props)
     
     def p_restart(self, entry = None):
-        self.playerPath.setPos(5,5,5)
+        self.playerPath.setPos(0,0,0)
     
     def collect_egg(self, entry):
         #print(entry)
