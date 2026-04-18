@@ -17,6 +17,11 @@ class gameEngine(ShowBase):
         ShowBase.__init__(self)
         simplepbr.init()
         
+        
+        #old numbers:
+            #gravity = 10
+            #jump_h = 5
+        
         self.gravity = 20
         self.p_speed = 10
         self.camera_speed = 20
@@ -24,6 +29,7 @@ class gameEngine(ShowBase):
         self.lock = True
         self.jump_v = 0
         self.jump_h = 10
+        self.climb = False
         self.score = 0
         self.egg_sounds = {}
         
@@ -57,33 +63,25 @@ class gameEngine(ShowBase):
         self.audio.setListenerVelocityAuto()
         
         #Add Gui
-        scoreLabel = TextNode('scoreLabel')
-        scoreLabel.setText("Score: ")
-        scoreLabelPath = aspect2d.attachNewNode(scoreLabel)
-        scoreLabelPath.setScale(0.07)
-        scoreLabelPath.setPos(-1.25,0,0.93)
-        
-        self.scoreDisplay = TextNode('scoreDisplay')
-        self.scoreDisplay.setText(str(self.score))
-        scoreDisplayPath = aspect2d.attachNewNode(self.scoreDisplay)
-        scoreDisplayPath.setScale(0.07)
-        scoreDisplayPath.setPos(-1,0,0.93)
+        self.add_gui()
         
         #Setup Skybox        
-        self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='sky2.png')
-        self.north_wall = self.generate_full_wall(box_space, box_space, 'n_wall', y=box_space/2, ry=90, img='sky.png')
-        self.south_wall = self.generate_full_wall(box_space, box_space, 's_wall', y=-box_space/2, rx=90, rz=90, ry=90, img='sky.png')
-        self.east_wall = self.generate_full_wall(box_space, box_space, 'e_wall', x=box_space/2, rz=-90, ry=90, img='sky.png')
-        self.west_wall = self.generate_full_wall(box_space, box_space, 'w_wall', x=-box_space/2, rz=90, ry=90, img='sky.png')
-        self.ceiling = self.generate_full_wall(box_space, box_space, 'ceiling', z=box_space/2, rz=180, img='sky2.png')
+        self.setup_skybox(box_space, boundry_floor)
         
         
         #Load world
         scene = self.loader.loadModel('worlds/smw_island.bam')
         
-        eggs = scene.findAllMatches('**/=Egg')
-        colliders = scene.findAllMatches('**/+CollisionNode')
+        #First, remove all objects used for reference and templates
         hiders = scene.findAllMatches('**/=remove')
+        
+        for node in hiders:
+            node.removeNode()
+        
+        #now apply scripts/conversion fixes
+        colliders = scene.findAllMatches('**/+CollisionNode')
+        eggs = scene.findAllMatches('**/=Egg')
+        climbers = scene.findAllMatches('**/=Climb')
         
         for collider in colliders:
             realNode = collider.parent
@@ -95,8 +93,11 @@ class gameEngine(ShowBase):
             self.accept('playerCol-into-' + egg.name, self.collect_egg)
             self.egg_sounds[egg.name] = base.loader.loadSfx(egg.getTag('Egg') + '.mp3')
             
-        for node in hiders:
-            node.removeNode()
+        for climber in climbers:
+            self.accept('playerCol-into-' + climber.name, self.enable_climb)
+            self.accept('playerCol-out-' + climber.name, self.disable_climb)
+            
+
           
         #For some reason I need to store the model path in order to keep this working
         #Lol lmao
@@ -125,8 +126,7 @@ class gameEngine(ShowBase):
         playerColPath = self.playerPath.attachNewNode(playerColNode)
         playerColPath.setCollideMask(BitMask32(0x01)) 
         
-        #playerColPath.show()
-        
+        #playerColPath.show()        
         self.camera_center = self.playerPath.attachNewNode(PandaNode('camera_spot'))
         
         
@@ -142,11 +142,16 @@ class gameEngine(ShowBase):
         
         self.playerPath.setPos(0,0,0)
 
+        #Add Pusher collsions
         pusher.addCollider(playerColPath, self.playerPath)
         traverser.addCollider(playerColPath, pusher)
+        
+        #Add traverser collsions
+        #traverser.addCollider(playerColPath, self.queue)
         traverser.addCollider(playerFeet, self.queue)
         
         pusher.addInPattern('%fn-into-%in')
+        pusher.addOutPattern('%fn-out-%in')
 
         #setup controls
         self.forward_button = KeyboardButton.ascii_key('w')
@@ -168,6 +173,93 @@ class gameEngine(ShowBase):
         #Setup frame_update
         taskMgr.add(self.frame_update, 'frame_update')
         
+    #helper functions for initialization:
+    def add_gui(self):
+        scoreLabel = TextNode('scoreLabel')
+        scoreLabel.setText("Score: ")
+        scoreLabelPath = aspect2d.attachNewNode(scoreLabel)
+        scoreLabelPath.setScale(0.07)
+        scoreLabelPath.setPos(-1.25,0,0.93)
+        
+        self.scoreDisplay = TextNode('scoreDisplay')
+        self.scoreDisplay.setText(str(self.score))
+        scoreDisplayPath = aspect2d.attachNewNode(self.scoreDisplay)
+        scoreDisplayPath.setScale(0.07)
+        scoreDisplayPath.setPos(-1,0,0.93)
+        
+    def setup_skybox(self, box_space, boundry_floor):
+        self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='sky2.png')
+        self.north_wall = self.generate_full_wall(box_space, box_space, 'n_wall', y=box_space/2, ry=90, img='sky.png')
+        self.south_wall = self.generate_full_wall(box_space, box_space, 's_wall', y=-box_space/2, rx=90, rz=90, ry=90, img='sky.png')
+        self.east_wall = self.generate_full_wall(box_space, box_space, 'e_wall', x=box_space/2, rz=-90, ry=90, img='sky.png')
+        self.west_wall = self.generate_full_wall(box_space, box_space, 'w_wall', x=-box_space/2, rz=90, ry=90, img='sky.png')
+        self.ceiling = self.generate_full_wall(box_space, box_space, 'ceiling', z=box_space/2, rz=180, img='sky2.png')
+    
+    def generate_plane(self, width, height, name='plane'):
+        # vdata = GeomVertexData('test', GeomVertexFormat.getV3n3cpt2(), Geom.UHStatic)
+        # vdata.setNumRows(4)
+        
+        vdata = GeomVertexData('test', GeomVertexFormat.getV3n3t2(), Geom.UHStatic)
+        vdata.setNumRows(4)
+
+        vertex = GeomVertexWriter(vdata, 'vertex')
+        normal = GeomVertexWriter(vdata, 'normal')
+        #color = GeomVertexWriter(vdata, 'color')
+        texcoord = GeomVertexWriter(vdata, 'texcoord')
+        
+        vertex.addData3(width/2, -(height/2), 0)
+        normal.addData3(0, 0, 1)
+        #color.addData4(0, 0, 1, 1)
+        texcoord.addData2(1, 0)
+
+        vertex.addData3(width/2, height/2, 0)
+        normal.addData3(0, 0, 1)
+        #color.addData4(0, 0, 1, 1)
+        texcoord.addData2(1, 1)
+
+        vertex.addData3(-(width/2), height/2, 0)
+        normal.addData3(0, 0, 1)
+        #color.addData4(0, 0, 1, 1)
+        texcoord.addData2(0, 1)
+
+        vertex.addData3(-(width/2), -(height/2), 0)
+        normal.addData3(0, 0, 1)
+        #color.addData4(0, 0, 1, 1)
+        texcoord.addData2(0, 0)
+
+        prim = GeomTriangles(Geom.UHStatic)
+        prim.addVertices(0,1,2)
+        prim.addVertices(2,3,0)
+
+        geom = Geom(vdata)
+        geom.addPrimitive(prim)
+
+        node = GeomNode(name)
+        node.addGeom(geom)
+        nodePath = render.attachNewNode(node)
+        return nodePath
+        
+    def create_wall(self, width, height, name='wall', x=0, y=0, z=0, rx=0,ry=0,rz=0, img='Untitled.png'):
+        wall = self.generate_plane(width, height, name)
+        wall.setHpr(rx,ry,rz)
+        wall.setPos(x,y,z)
+        
+        tex = loader.loadTexture(img)
+        #print(tex)
+        wall.setTexture(tex)
+        return wall
+        
+    def generate_full_wall(self, width, height, name='wall', x=0, y=0, z=0, rx=0,ry=0,rz=0, img = 'Untitled.png'):
+        wall = self.create_wall(width, height, name, x, y, z, rx, ry, rz, img)
+        collNode = CollisionNode(name)
+        collNode.addSolid(CollisionPlane(Plane(Vec3(0, 0, 1), Point3(0, 0, 0))))
+        collPath = wall.attachNewNode(collNode)
+        
+        self.accept('playerCol-into-' + name, self.p_restart)
+        
+        return collPath
+        
+    #function called every frame
     def frame_update(self, task):
         ds = task.time - self.last_time
     
@@ -194,7 +286,9 @@ class gameEngine(ShowBase):
         for entry in self.queue.entries:
             jump = True
             
-        if is_down(self.jump_button) and jump:
+            
+        #I may need to mod this function to accomodate with different gravity
+        if is_down(self.jump_button) and (jump or self.climb):
             self.jump_v = self.jump_h * 2
         else:
             self.jump_v -= self.gravity * ds
@@ -258,6 +352,7 @@ class gameEngine(ShowBase):
     def p_restart(self, entry = None):
         self.playerPath.setPos(0,0,0)
     
+    #collision events
     def collect_egg(self, entry):
         #print(entry)
         entry.getIntoNodePath().parent.removeNode()
@@ -265,70 +360,13 @@ class gameEngine(ShowBase):
         self.scoreDisplay.setText(str(self.score))
         self.egg_sounds[entry.getIntoNodePath().name].play()
         
+    def enable_climb(self, entry):
+        self.climb = True
         
-    def generate_plane(self, width, height, name='plane'):
-        # vdata = GeomVertexData('test', GeomVertexFormat.getV3n3cpt2(), Geom.UHStatic)
-        # vdata.setNumRows(4)
+    def disable_climb(self,entry):
+        #print("OUT")\
+        self.climb = False
         
-        vdata = GeomVertexData('test', GeomVertexFormat.getV3n3t2(), Geom.UHStatic)
-        vdata.setNumRows(4)
-
-        vertex = GeomVertexWriter(vdata, 'vertex')
-        normal = GeomVertexWriter(vdata, 'normal')
-        #color = GeomVertexWriter(vdata, 'color')
-        texcoord = GeomVertexWriter(vdata, 'texcoord')
-        
-        vertex.addData3(width/2, -(height/2), 0)
-        normal.addData3(0, 0, 1)
-        #color.addData4(0, 0, 1, 1)
-        texcoord.addData2(1, 0)
-
-        vertex.addData3(width/2, height/2, 0)
-        normal.addData3(0, 0, 1)
-        #color.addData4(0, 0, 1, 1)
-        texcoord.addData2(1, 1)
-
-        vertex.addData3(-(width/2), height/2, 0)
-        normal.addData3(0, 0, 1)
-        #color.addData4(0, 0, 1, 1)
-        texcoord.addData2(0, 1)
-
-        vertex.addData3(-(width/2), -(height/2), 0)
-        normal.addData3(0, 0, 1)
-        #color.addData4(0, 0, 1, 1)
-        texcoord.addData2(0, 0)
-
-        prim = GeomTriangles(Geom.UHStatic)
-        prim.addVertices(0,1,2)
-        prim.addVertices(2,3,0)
-
-        geom = Geom(vdata)
-        geom.addPrimitive(prim)
-
-        node = GeomNode(name)
-        node.addGeom(geom)
-        nodePath = render.attachNewNode(node)
-        return nodePath
-        
-    def create_wall(self, width, height, name='wall', x=0, y=0, z=0, rx=0,ry=0,rz=0, img='Untitled.png'):
-        wall = self.generate_plane(width, height, name)
-        wall.setHpr(rx,ry,rz)
-        wall.setPos(x,y,z)
-        
-        tex = loader.loadTexture(img)
-        #print(tex)
-        wall.setTexture(tex)
-        return wall
-        
-    def generate_full_wall(self, width, height, name='wall', x=0, y=0, z=0, rx=0,ry=0,rz=0, img = 'Untitled.png'):
-        wall = self.create_wall(width, height, name, x, y, z, rx, ry, rz, img)
-        collNode = CollisionNode(name)
-        collNode.addSolid(CollisionPlane(Plane(Vec3(0, 0, 1), Point3(0, 0, 0))))
-        collPath = wall.attachNewNode(collNode)
-        
-        self.accept('playerCol-into-' + name, self.p_restart)
-        
-        
-        return collPath
+    
 game = gameEngine()
 game.run()
