@@ -1,6 +1,6 @@
 from direct.showbase.ShowBase import ShowBase
 from panda3d.core import CollisionNode, PandaNode, TextNode
-from panda3d.core import CollisionSphere, CollisionPlane
+from panda3d.core import CollisionSphere, CollisionPlane, CollisionSolid
 from panda3d.core import Point3, Plane, Vec3
 from panda3d.core import CollisionHandlerPusher, CollisionHandlerQueue, CollisionTraverser
 from panda3d.core import KeyboardButton, BitMask32
@@ -32,6 +32,8 @@ class gameEngine(ShowBase):
         self.climb = False
         self.score = 0
         self.egg_sounds = {}
+        self.look_list = []
+        self.wait_list = {}
         
         self.base_cam_x = 0
         self.base_cam_y = 0
@@ -82,6 +84,9 @@ class gameEngine(ShowBase):
         colliders = scene.findAllMatches('**/+CollisionNode')
         eggs = scene.findAllMatches('**/=Egg')
         climbers = scene.findAllMatches('**/=Climb')
+        lookers = scene.findAllMatches('**/=Look')
+        buttons = scene.findAllMatches('**/=Button')
+        waiters = scene.findAllMatches('**/=activation')
         
         for collider in colliders:
             realNode = collider.parent
@@ -96,6 +101,22 @@ class gameEngine(ShowBase):
         for climber in climbers:
             self.accept('playerCol-into-' + climber.name, self.enable_climb)
             self.accept('playerCol-out-' + climber.name, self.disable_climb)
+            
+        for looker in lookers:
+            self.look_list.append(looker)
+            
+        for button in buttons:            
+            self.accept('playerCol-into-' + button.name, self.activate_button, [button.getTag('Button')])
+            
+        for waiter in waiters:
+            waiter.hide()
+            
+            key = waiter.getTag('activation')
+            
+            if key in self.wait_list:
+                self.wait_list[key].append(waiter)
+            else:
+                self.wait_list[key] = [waiter]
             
 
           
@@ -335,6 +356,19 @@ class gameEngine(ShowBase):
         self.playerPath.setFluidPos(self.playerPath.getX() + actual_x, self.playerPath.getY() + actual_y, self.playerPath.getZ() + z_speed)
         #self.playerPath.setHpr(self.playerPath.getH() + camera_x, self.playerPath.getP() + camera_y, self.playerPath.getR())
         self.camera_center.setHpr(self.camera_center.getH() + camera_x, self.camera_center.getP() + camera_y, self.camera_center.getR())
+        
+        
+        
+        for looker in self.look_list:
+            #last_v = looker.getH()
+            looker.lookAt(self.playerPath)
+            
+            #looker.setR(looker.getR() + 1)
+            looker.setP(looker.getP() + 90)
+            looker.setR(looker.getR() + 180)
+            #looker.setH(looker.getH() + (task.time) * 50)
+            #looker.setP(looker.getP() + (task.time) * 50)
+            #looker.setR(looker.getR() + (task.time) * 50)
 
         self.last_time = task.time
         return task.cont
@@ -364,8 +398,14 @@ class gameEngine(ShowBase):
         self.climb = True
         
     def disable_climb(self,entry):
-        #print("OUT")\
         self.climb = False
+        
+    def activate_button(self, button, entry):
+        print(button)
+        entry.getIntoNodePath().parent.removeNode()
+        
+        for ob in self.wait_list[button]:
+            ob.show()
         
     
 game = gameEngine()
