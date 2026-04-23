@@ -8,6 +8,8 @@ from panda3d.core import WindowProperties
 from panda3d.core import GeomVertexData, GeomVertexFormat, Geom, GeomTriangles, GeomVertexWriter, GeomNode
 from direct.showbase import Audio3DManager
 
+from time import sleep
+
 import simplepbr
 from math import sin, cos, pi
 
@@ -34,6 +36,7 @@ class gameEngine(ShowBase):
         self.egg_sounds = {}
         self.look_list = []
         self.wait_list = {}
+        self.timed_button_watches = {}
         
         self.base_cam_x = 0
         self.base_cam_y = 0
@@ -74,25 +77,31 @@ class gameEngine(ShowBase):
         #Load world
         scene = self.loader.loadModel('worlds/smw_island.bam')
         
+        #world fixes
+        
         #First, remove all objects used for reference and templates
         hiders = scene.findAllMatches('**/=remove')
         
         for node in hiders:
             node.removeNode()
+            
         
-        #now apply scripts/conversion fixes
+        #Reparent all colliders, and then hide them
         colliders = scene.findAllMatches('**/+CollisionNode')
+        for collider in colliders:
+            realNode = collider.parent
+            for child in collider.children:
+                child.reparentTo(realNode)
+            collider.hide()
+        
+        #add Scripts
         eggs = scene.findAllMatches('**/=Egg')
         climbers = scene.findAllMatches('**/=Climb')
         lookers = scene.findAllMatches('**/=Look')
         buttons = scene.findAllMatches('**/=Button')
         waiters = scene.findAllMatches('**/=activation')
         
-        for collider in colliders:
-            realNode = collider.parent
-            for child in collider.children:
-                child.reparentTo(realNode)
-            collider.hide()
+
             
         for egg in eggs:
             self.accept('playerCol-into-' + egg.name, self.collect_egg)
@@ -105,18 +114,22 @@ class gameEngine(ShowBase):
         for looker in lookers:
             self.look_list.append(looker)
             
-        for button in buttons:            
-            self.accept('playerCol-into-' + button.name, self.activate_button, [button.getTag('Button')])
+        for button in buttons:
+            time_val = button.getTag('Timer')
+            activation_name = button.getTag('Button')
+            
+            if time_val == '':
+                self.accept('playerCol-into-' + button.name, self.activate_button, [activation_name])
+            else:
+                self.accept('playerCol-into-' + button.name, self.timed_activation, [activation_name, float(time_val)])
+                self.accept('playerCol-out-' + button.name, self.activation_timer_stop)
+            
+            self.wait_list[activation_name] = []
+            #print(button.getTag('Timer'))
             
         for waiter in waiters:
             waiter.hide()
-            
-            key = waiter.getTag('activation')
-            
-            if key in self.wait_list:
-                self.wait_list[key].append(waiter)
-            else:
-                self.wait_list[key] = [waiter]
+            self.wait_list[waiter.getTag('activation')].append(waiter)          
             
 
           
@@ -369,6 +382,20 @@ class gameEngine(ShowBase):
             #looker.setH(looker.getH() + (task.time) * 50)
             #looker.setP(looker.getP() + (task.time) * 50)
             #looker.setR(looker.getR() + (task.time) * 50)
+            
+        completed_timers = []
+        for timer in self.timed_button_watches:
+            timer_data = self.timed_button_watches[timer]
+            print(timer + ':' + str(timer_data))
+            timer_data[3] += ds
+            
+            if timer_data[3] >= timer_data[2]:
+                #self.timed_button_watches.pop(timer)
+                completed_timers.append(timer)
+                self.reveal_objects(timer_data[0], timer_data[1])
+                
+        for timer in completed_timers:
+            self.timed_button_watches.pop(timer)
 
         self.last_time = task.time
         return task.cont
@@ -400,13 +427,23 @@ class gameEngine(ShowBase):
     def disable_climb(self,entry):
         self.climb = False
         
-    def activate_button(self, button, entry):
-        print(button)
-        entry.getIntoNodePath().parent.removeNode()
+    def activate_button(self, button, entry):       
+        self.reveal_objects(entry.getIntoNodePath().parent, button)
         
-        for ob in self.wait_list[button]:
+    def timed_activation(self, button, timer, entry):
+        key = entry.getIntoNodePath().name
+        self.timed_button_watches[key] = [entry.getIntoNodePath().parent, button, timer, 0]
+        
+    def activation_timer_stop(self, entry):
+        print('OUT')
+        key = entry.getIntoNodePath().name
+        if key in self.timed_button_watches:
+            self.timed_button_watches.pop(key)
+            
+    def reveal_objects(self, nodePath, items):
+        nodePath.removeNode()
+        for ob in self.wait_list[items]:
             ob.show()
-        
     
 game = gameEngine()
 game.run()
