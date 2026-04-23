@@ -84,8 +84,7 @@ class gameEngine(ShowBase):
         
         for node in hiders:
             node.removeNode()
-            
-        
+
         #Reparent all colliders, and then hide them
         colliders = scene.findAllMatches('**/+CollisionNode')
         for collider in colliders:
@@ -93,13 +92,15 @@ class gameEngine(ShowBase):
             for child in collider.children:
                 child.reparentTo(realNode)
             collider.hide()
+            
+
         
         #add Scripts
         eggs = scene.findAllMatches('**/=Egg')
         climbers = scene.findAllMatches('**/=Climb')
         lookers = scene.findAllMatches('**/=Look')
         buttons = scene.findAllMatches('**/=Button')
-        waiters = scene.findAllMatches('**/=activation')
+        waiters = scene.findAllMatches('**/=Appear')
         
 
             
@@ -129,7 +130,7 @@ class gameEngine(ShowBase):
             
         for waiter in waiters:
             waiter.hide()
-            self.wait_list[waiter.getTag('activation')].append(waiter)          
+            self.wait_list[waiter.getTag('Appear')].append(waiter)          
             
 
           
@@ -386,7 +387,7 @@ class gameEngine(ShowBase):
         completed_timers = []
         for timer in self.timed_button_watches:
             timer_data = self.timed_button_watches[timer]
-            print(timer + ':' + str(timer_data))
+            #print(timer + ':' + str(timer_data))
             timer_data[3] += ds
             
             if timer_data[3] >= timer_data[2]:
@@ -435,7 +436,7 @@ class gameEngine(ShowBase):
         self.timed_button_watches[key] = [entry.getIntoNodePath().parent, button, timer, 0]
         
     def activation_timer_stop(self, entry):
-        print('OUT')
+        #print('OUT')
         key = entry.getIntoNodePath().name
         if key in self.timed_button_watches:
             self.timed_button_watches.pop(key)
