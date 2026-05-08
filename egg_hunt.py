@@ -8,6 +8,8 @@ from panda3d.core import WindowProperties
 from panda3d.core import GeomVertexData, GeomVertexFormat, Geom, GeomTriangles, GeomVertexWriter, GeomNode
 from direct.showbase import Audio3DManager
 
+from functools import partial
+
 from time import sleep
 
 import simplepbr
@@ -48,10 +50,10 @@ class gameEngine(ShowBase):
             #box_space: 400
             #boundry_floor: 10
         
-        box_space = 1000
+        box_space = 5000
         boundry_floor = 50
         boy_radius = 1
-        self.dead_zone = 0.01
+        #self.dead_zone = 0.01
         
         self.props = WindowProperties()
         self.props.setCursorHidden(self.lock)
@@ -77,21 +79,8 @@ class gameEngine(ShowBase):
         #Load world
         scene = self.loader.loadModel('worlds/smw_island.bam')
         
-        #world fixes
-        
-        #First, remove all objects used for reference and templates
-        hiders = scene.findAllMatches('**/=remove')
-        
-        for node in hiders:
-            node.removeNode()
-
-        #Reparent all colliders, and then hide them
-        colliders = scene.findAllMatches('**/+CollisionNode')
-        for collider in colliders:
-            realNode = collider.parent
-            for child in collider.children:
-                child.reparentTo(realNode)
-            collider.hide()
+        #world fixes            
+        self.modify_world_nodes(scene)
             
 
         
@@ -101,6 +90,8 @@ class gameEngine(ShowBase):
         lookers = scene.findAllMatches('**/=Look')
         buttons = scene.findAllMatches('**/=Button')
         waiters = scene.findAllMatches('**/=Appear')
+        vanishers = scene.findAllMatches('**/=Disappear')
+        specials = scene.findAllMatches('**/=special')
         
 
             
@@ -114,6 +105,7 @@ class gameEngine(ShowBase):
             
         for looker in lookers:
             self.look_list.append(looker)
+            #print(looker.children[0].node())
             
         for button in buttons:
             time_val = button.getTag('Timer')
@@ -130,8 +122,31 @@ class gameEngine(ShowBase):
             
         for waiter in waiters:
             waiter.hide()
-            self.wait_list[waiter.getTag('Appear')].append(waiter)          
+            #self.wait_list[waiter.getTag('Appear')].append([waiter, lambda a : a.hide()])
+            self.wait_list[waiter.getTag('Appear')].append(waiter.show)
             
+        for waiter in vanishers:
+            #self.wait_list[waiter.getTag('Disappear')].append([waiter, lambda a : a.show()])
+            self.wait_list[waiter.getTag('Disappear')].append(waiter.hide)
+            
+            
+        for special in specials:
+            special_type = special.getTag('special')
+            if special_type == 'chase':
+                egg_sight = CollisionNode('egg_sight')
+                egg_sphere = CollisionSphere(0,0,0,5)
+                egg_sphere.tangible = False
+                egg_sight.addSolid(egg_sphere)
+                #egg_sight.show()
+                esp = special.attachNewNode(egg_sight)
+                esp.show()
+                
+            else:
+                print(special_type + ' not implemented')
+            
+            
+        self.accept('playerCol-into-egg_sight', self.egg_flee)
+        self.egg_speed = 3
 
           
         #For some reason I need to store the model path in order to keep this working
@@ -229,7 +244,22 @@ class gameEngine(ShowBase):
         self.east_wall = self.generate_full_wall(box_space, box_space, 'e_wall', x=box_space/2, rz=-90, ry=90, img='sky.png')
         self.west_wall = self.generate_full_wall(box_space, box_space, 'w_wall', x=-box_space/2, rz=90, ry=90, img='sky.png')
         self.ceiling = self.generate_full_wall(box_space, box_space, 'ceiling', z=box_space/2, rz=180, img='sky2.png')
-    
+        
+    def modify_world_nodes(self, scene):
+        #First, remove all objects used for reference and templates
+        hiders = scene.findAllMatches('**/=remove')
+        
+        for node in hiders:
+            node.removeNode()
+
+        #Reparent all colliders, and then hide them
+        colliders = scene.findAllMatches('**/+CollisionNode')
+        for collider in colliders:
+            realNode = collider.parent
+            for child in collider.children:
+                child.reparentTo(realNode)
+            collider.hide()
+        
     def generate_plane(self, width, height, name='plane'):
         # vdata = GeomVertexData('test', GeomVertexFormat.getV3n3cpt2(), Geom.UHStatic)
         # vdata.setNumRows(4)
@@ -336,19 +366,39 @@ class gameEngine(ShowBase):
         camera_x = 0
         camera_y = 0
         if base.mouseWatcherNode.hasMouse():
-            x = base.mouseWatcherNode.getMouseX() - self.base_cam_x
-            y = base.mouseWatcherNode.getMouseY() - self.base_cam_y
+            #x = base.mouseWatcherNode.getMouseX() - self.base_cam_x
+            x = base.mouseWatcherNode.getMouseX() - (((base.win.getXSize() // 2) - (base.win.getXSize() / 2)) / (base.win.getXSize() / 2))
+            #y = base.mouseWatcherNode.getMouseY() - self.base_cam_y
+            y = base.mouseWatcherNode.getMouseY() + (((base.win.getYSize() // 2) - (base.win.getYSize() / 2)) / (base.win.getYSize() / 2))
+            #The above equation took so much time to solve you have NO IDEA
+            #I can probabbly simplify it
             
             
-            if x <= self.dead_zone and x >= -self.dead_zone:
-                x = 0
-            
-            if y <= self.dead_zone and y >= -self.dead_zone:
-                y = 0
 
-            if self.lock:
+                #y += 0.5
+            
+            #if x <= self.dead_zone and x >= -self.dead_zone:
+                #x = 0
+            
+            #if y <= self.dead_zone and y >= -self.dead_zone:
+                #y = 0
+                
+            #print(base.win.getYSize() % 2)
+            
+            
+            if self.lock:                
+                            
+                print(x)
+                print(base.mouseWatcherNode.getMouseX())
+                print(base.win.getXSize())
+                print((((base.win.getXSize() // 2) - (base.win.getXSize() / 2)) / (base.win.getXSize() / 2)))
+                print('-----')
+
+            
                 camera_x = -x * self.camera_speed
                 camera_y = y * self.camera_speed
+                
+
             
                 base.win.movePointer(0, base.win.getXSize() // 2, base.win.getYSize() // 2)
     
@@ -378,11 +428,35 @@ class gameEngine(ShowBase):
             looker.lookAt(self.playerPath)
             
             #looker.setR(looker.getR() + 1)
-            looker.setP(looker.getP() + 90)
-            looker.setR(looker.getR() + 180)
-            #looker.setH(looker.getH() + (task.time) * 50)
-            #looker.setP(looker.getP() + (task.time) * 50)
-            #looker.setR(looker.getR() + (task.time) * 50)
+            #print()
+            
+            #offsets
+            
+            #I have to do this BS because blend2BAM decided No I dOnT WaNa mAkE thE aRRay dATa An aRrAy, iT sHoUlD BE sTRing
+            #Actually it might be pandas fault :(
+            offsets = looker.getTag('Look').split('[')[1].split(']')[0].split(', ')
+            #print(offsets)
+            anchor_tag = looker.getTag('Anchors')
+            anchors = [False, False, False]
+            if anchor_tag != '':
+                anchor_tag = anchor_tag.split('[')[1].split(']')[0].split(', ')
+                for i in range(3):
+                    anchors[i] = anchor_tag[i] == 'True'
+                
+            if anchors[0]:
+                looker.setH(int(offsets[0]))
+            else:
+                looker.setH(looker.getH() + int(offsets[0]))
+                
+            if anchors[1]:
+                looker.setP(int(offsets[1]))
+            else:
+                looker.setP(looker.getP() + int(offsets[1]))
+                
+            if anchors[2]:
+                looker.setR(int(offsets[2]))
+            else:
+                looker.setR(looker.getR() + int(offsets[2]))
             
         completed_timers = []
         for timer in self.timed_button_watches:
@@ -444,7 +518,20 @@ class gameEngine(ShowBase):
     def reveal_objects(self, nodePath, items):
         nodePath.removeNode()
         for ob in self.wait_list[items]:
-            ob.show()
+            ob()
+            
+    def egg_flee(self, entry):
+        egg = entry.getIntoNodePath().parent
+        person = entry.getFromNodePath().parent
+        
+        #print(egg)
+        #print(person)
+        diretion_vector = egg.getPos() - person.getPos()
+        #print(diretion_vector)
+        diretion_vector.normalize()
+        #print(diretion_vector)
+        
+        egg.setPos(egg.getPos() + diretion_vector * self.egg_speed)
     
 game = gameEngine()
 game.run()
