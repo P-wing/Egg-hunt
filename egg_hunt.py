@@ -13,7 +13,7 @@ from functools import partial
 from time import sleep
 
 import simplepbr
-from math import sin, cos, pi
+from math import sin, cos, pi, sqrt
 
 
 class gameEngine(ShowBase):
@@ -26,7 +26,7 @@ class gameEngine(ShowBase):
             #gravity = 10
             #jump_h = 5
         
-        self.gravity = 20
+        self.gravity = 10
         self.p_speed = 10
         self.camera_speed = 20
         self.last_time = 0
@@ -37,13 +37,17 @@ class gameEngine(ShowBase):
         self.score = 0
         self.egg_sounds = {}
         self.look_list = []
+        self.spin_list = []
         self.wait_list = {}
+        self.fall_list = []
         self.timed_button_watches = {}
         
         self.base_cam_x = 0
         self.base_cam_y = 0
         
         self.cam_y_pos = base.win.getYSize() // 2
+        
+        #player_col_mask = 
         
         #magic numbers
         #old numbers:
@@ -69,8 +73,7 @@ class gameEngine(ShowBase):
         self.audio = Audio3DManager.Audio3DManager(base.sfxManagerList[0], camera)
         self.audio.setListenerVelocityAuto()
         
-        #Add Gui
-        self.add_gui()
+        
         
         #Setup Skybox        
         self.setup_skybox(box_space, boundry_floor)
@@ -89,15 +92,16 @@ class gameEngine(ShowBase):
         climbers = scene.findAllMatches('**/=Climb')
         lookers = scene.findAllMatches('**/=Look')
         buttons = scene.findAllMatches('**/=Button')
-        waiters = scene.findAllMatches('**/=Appear')
+        #waiters = scene.findAllMatches('**/=Appear')
         vanishers = scene.findAllMatches('**/=Disappear')
-        specials = scene.findAllMatches('**/=special')
+        #specials = scene.findAllMatches('**/=special')
         
 
             
         for egg in eggs:
             self.accept('playerCol-into-' + egg.name, self.collect_egg)
-            self.egg_sounds[egg.name] = base.loader.loadSfx(egg.getTag('Egg') + '.mp3')
+            self.egg_sounds[egg.name] = base.loader.loadSfx('sounds\\' + egg.getTag('Egg') + '.mp3')
+            self.score += 1
             
         for climber in climbers:
             self.accept('playerCol-into-' + climber.name, self.enable_climb)
@@ -120,40 +124,63 @@ class gameEngine(ShowBase):
             self.wait_list[activation_name] = []
             #print(button.getTag('Timer'))
             
-        for waiter in waiters:
-            waiter.hide()
+        #for waiter in waiters:
+        for node in scene.findAllMatches('**/=Appear'):
+            #waiter.hide()
+            node.hide()
+            #print(node.findAllMatches('**/+CollisionNode'))
+            for col in node.findAllMatches('**/+CollisionNode'):
+                col.setCollideMask(BitMask32(0x00))
+                self.wait_list[node.getTag('Appear')].append(partial(col.setCollideMask, BitMask32(0x03)))
             #self.wait_list[waiter.getTag('Appear')].append([waiter, lambda a : a.hide()])
-            self.wait_list[waiter.getTag('Appear')].append(waiter.show)
+            #self.wait_list[waiter.getTag('Appear')].append(waiter.show)
+            self.wait_list[node.getTag('Appear')].append(node.show)
+            
+            
+            #gonna test this...
+            #myColliderNodePath.node().setFromCollideMask(BitMask32.allOff())
             
         for waiter in vanishers:
             #self.wait_list[waiter.getTag('Disappear')].append([waiter, lambda a : a.show()])
             self.wait_list[waiter.getTag('Disappear')].append(waiter.hide)
             
+            for col in waiter.findAllMatches('**/+CollisionNode'):
+                self.wait_list[waiter.getTag('Disappear')].append(partial(col.setCollideMask, BitMask32(0x00)))
             
-        for special in specials:
-            special_type = special.getTag('special')
-            if special_type == 'chase':
-                egg_sight = CollisionNode('egg_sight')
-                egg_sphere = CollisionSphere(0,0,0,5)
-                egg_sphere.tangible = False
-                egg_sight.addSolid(egg_sphere)
-                #egg_sight.show()
-                esp = special.attachNewNode(egg_sight)
-                esp.show()
+        for node in scene.findAllMatches('**/=Spin'):
+            self.spin_list.append(node)
+            
+        for node in scene.findAllMatches('**/=gravity'):
+            self.wait_list[node.getTag('gravity')].append(partial(self.fall_list.append, node))
+            #self.fall_list.append(node)
+            
+            
+            
+        # for special in specials:
+            # special_type = special.getTag('special')
+            # if special_type == 'chase':
+                # egg_sight = CollisionNode('egg_sight')
+                # egg_sphere = CollisionSphere(0,0,0,5)
+                # egg_sphere.tangible = False
+                # egg_sight.addSolid(egg_sphere)
+                # #egg_sight.show()
+                # esp = special.attachNewNode(egg_sight)
+                # esp.show()
                 
-            else:
-                print(special_type + ' not implemented')
+            # else:
+                # print(special_type + ' not implemented')
             
             
-        self.accept('playerCol-into-egg_sight', self.egg_flee)
-        self.egg_speed = 3
+        # self.accept('playerCol-into-egg_sight', self.egg_flee)
+        # self.egg_speed = 3
+        
 
           
         #For some reason I need to store the model path in order to keep this working
         #Lol lmao
         self.sounds = []
         for speaker in scene.findAllMatches('**/=sound'):            
-            mySound = self.audio.loadSfx(speaker.getTag('sound'))
+            mySound = self.audio.loadSfx('sounds/' + speaker.getTag('sound') + '.mp3')
             self.audio.attachSoundToObject(mySound, speaker)
             self.sounds.append(speaker)
             
@@ -162,6 +189,9 @@ class gameEngine(ShowBase):
             mySound.play()
         
         scene.reparentTo(self.render)
+        
+        #Add Gui
+        self.add_gui()
         
         #Load player
         player = PandaNode('player')
@@ -226,7 +256,7 @@ class gameEngine(ShowBase):
     #helper functions for initialization:
     def add_gui(self):
         scoreLabel = TextNode('scoreLabel')
-        scoreLabel.setText("Score: ")
+        scoreLabel.setText("Eggs left: ")
         scoreLabelPath = aspect2d.attachNewNode(scoreLabel)
         scoreLabelPath.setScale(0.07)
         scoreLabelPath.setPos(-1.25,0,0.93)
@@ -235,7 +265,7 @@ class gameEngine(ShowBase):
         self.scoreDisplay.setText(str(self.score))
         scoreDisplayPath = aspect2d.attachNewNode(self.scoreDisplay)
         scoreDisplayPath.setScale(0.07)
-        scoreDisplayPath.setPos(-1,0,0.93)
+        scoreDisplayPath.setPos(-0.94,0,0.93)
         
     def setup_skybox(self, box_space, boundry_floor):
         self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='sky2.png')
@@ -351,15 +381,21 @@ class gameEngine(ShowBase):
         for entry in self.queue.entries:
             jump = True
             
+        
+            
             
         #I may need to mod this function to accomodate with different gravity
         if is_down(self.jump_button) and (jump or self.climb):
-            self.jump_v = self.jump_h * 2
+            #self.jump_v = self.jump_h * 2
+            self.jump_v = sqrt(self.jump_h * 4 * self.gravity)
+        elif (jump or self.climb):
+            self.jump_v = -self.gravity
         else:
             self.jump_v -= self.gravity * ds
             
-        if self.jump_v < -self.gravity:
-            self.jump_v = -self.gravity
+        #if self.jump_v < -self.gravity:
+            #self.jump_v = -self.gravity
+            
             
         z_speed = self.jump_v * ds
         
@@ -372,34 +408,13 @@ class gameEngine(ShowBase):
             y = base.mouseWatcherNode.getMouseY() + (((base.win.getYSize() // 2) - (base.win.getYSize() / 2)) / (base.win.getYSize() / 2))
             #The above equation took so much time to solve you have NO IDEA
             #I can probabbly simplify it
-            
-            
-
-                #y += 0.5
-            
-            #if x <= self.dead_zone and x >= -self.dead_zone:
-                #x = 0
-            
-            #if y <= self.dead_zone and y >= -self.dead_zone:
-                #y = 0
-                
-            #print(base.win.getYSize() % 2)
-            
-            
-            if self.lock:                
-                            
-                print(x)
-                print(base.mouseWatcherNode.getMouseX())
-                print(base.win.getXSize())
-                print((((base.win.getXSize() // 2) - (base.win.getXSize() / 2)) / (base.win.getXSize() / 2)))
-                print('-----')
 
             
+            
+            if self.lock:
                 camera_x = -x * self.camera_speed
                 camera_y = y * self.camera_speed
-                
 
-            
                 base.win.movePointer(0, base.win.getXSize() // 2, base.win.getYSize() // 2)
     
         
@@ -457,6 +472,12 @@ class gameEngine(ShowBase):
                 looker.setR(int(offsets[2]))
             else:
                 looker.setR(looker.getR() + int(offsets[2]))
+                
+        #Setup spinners:
+        for node in self.spin_list:
+            speed = int(node.getTag('Spin'))
+            
+            node.setH(speed*ds + node.getH())
             
         completed_timers = []
         for timer in self.timed_button_watches:
@@ -471,6 +492,9 @@ class gameEngine(ShowBase):
                 
         for timer in completed_timers:
             self.timed_button_watches.pop(timer)
+            
+        for node in self.fall_list:
+            node.setFluidPos(node.getX(), node.getY(), node.getZ() - (self.gravity * ds))
 
         self.last_time = task.time
         return task.cont
@@ -489,10 +513,10 @@ class gameEngine(ShowBase):
         self.playerPath.setPos(0,0,0)
     
     #collision events
-    def collect_egg(self, entry):
+    def collect_egg(self, entry):    
         #print(entry)
         entry.getIntoNodePath().parent.removeNode()
-        self.score += 1
+        self.score -= 1
         self.scoreDisplay.setText(str(self.score))
         self.egg_sounds[entry.getIntoNodePath().name].play()
         
@@ -520,18 +544,18 @@ class gameEngine(ShowBase):
         for ob in self.wait_list[items]:
             ob()
             
-    def egg_flee(self, entry):
-        egg = entry.getIntoNodePath().parent
-        person = entry.getFromNodePath().parent
+    # def egg_flee(self, entry):
+        # egg = entry.getIntoNodePath().parent
+        # person = entry.getFromNodePath().parent
         
-        #print(egg)
-        #print(person)
-        diretion_vector = egg.getPos() - person.getPos()
-        #print(diretion_vector)
-        diretion_vector.normalize()
-        #print(diretion_vector)
+        # #print(egg)
+        # #print(person)
+        # diretion_vector = egg.getPos() - person.getPos()
+        # #print(diretion_vector)
+        # diretion_vector.normalize()
+        # #print(diretion_vector)
         
-        egg.setPos(egg.getPos() + diretion_vector * self.egg_speed)
+        # egg.setPos(egg.getPos() + diretion_vector * self.egg_speed)
     
 game = gameEngine()
 game.run()
