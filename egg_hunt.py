@@ -151,8 +151,13 @@ class gameEngine(ShowBase):
             self.spin_list.append(node)
             
         for node in scene.findAllMatches('**/=gravity'):
-            self.wait_list[node.getTag('gravity')].append(partial(self.fall_list.append, node))
-            #self.fall_list.append(node)
+            #self.wait_list[node.getTag('gravity')].append(partial(self.fall_list.append, node))
+            appear = node.getTag('Appear')
+            
+            if appear in self.wait_list:
+                self.wait_list[appear].append(partial(self.fall_list.append, node))
+            else:
+                self.fall_list.append(node)
             
             
             
@@ -179,14 +184,23 @@ class gameEngine(ShowBase):
         #For some reason I need to store the model path in order to keep this working
         #Lol lmao
         self.sounds = []
+        
+        #sound_controls = []
         for speaker in scene.findAllMatches('**/=sound'):            
             mySound = self.audio.loadSfx('sounds/' + speaker.getTag('sound') + '.mp3')
             self.audio.attachSoundToObject(mySound, speaker)
             self.sounds.append(speaker)
             
             self.audio.setSoundVelocityAuto(mySound)
-            mySound.setLoop(True)
-            mySound.play()
+            mySound.setLoop(True)      
+            #mySound.play()
+            
+            appearance = node.getTag('Appear')
+            if appearance in self.wait_list:
+                self.wait_list[appearance].append(mySound.play)
+            else:
+                mySound.play()
+            #self.wait_list[node.getTag('Appear')].append(node.show)
         
         scene.reparentTo(self.render)
         
@@ -494,7 +508,10 @@ class gameEngine(ShowBase):
             self.timed_button_watches.pop(timer)
             
         for node in self.fall_list:
-            node.setFluidPos(node.getX(), node.getY(), node.getZ() - (self.gravity * ds))
+            fall_speed = int(node.getTag('gravity'))
+        
+            #node.setFluidPos(node.getX(), node.getY(), node.getZ() - (self.gravity * ds))
+            node.setFluidPos(node.getX(), node.getY(), node.getZ() - (fall_speed * ds))
 
         self.last_time = task.time
         return task.cont
