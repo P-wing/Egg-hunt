@@ -32,7 +32,7 @@ class gameEngine(ShowBase):
         self.last_time = 0
         self.lock = True
         self.jump_v = 0
-        self.jump_h = 10
+        self.jump_h = 5
         self.climb = False
         self.score = 0
         self.egg_sounds = {}
@@ -94,7 +94,6 @@ class gameEngine(ShowBase):
         buttons = scene.findAllMatches('**/=Button')
         #waiters = scene.findAllMatches('**/=Appear')
         vanishers = scene.findAllMatches('**/=Disappear')
-        #specials = scene.findAllMatches('**/=special')
         
 
             
@@ -158,27 +157,6 @@ class gameEngine(ShowBase):
                 self.wait_list[appear].append(partial(self.fall_list.append, node))
             else:
                 self.fall_list.append(node)
-            
-            
-            
-        # for special in specials:
-            # special_type = special.getTag('special')
-            # if special_type == 'chase':
-                # egg_sight = CollisionNode('egg_sight')
-                # egg_sphere = CollisionSphere(0,0,0,5)
-                # egg_sphere.tangible = False
-                # egg_sight.addSolid(egg_sphere)
-                # #egg_sight.show()
-                # esp = special.attachNewNode(egg_sight)
-                # esp.show()
-                
-            # else:
-                # print(special_type + ' not implemented')
-            
-            
-        # self.accept('playerCol-into-egg_sight', self.egg_flee)
-        # self.egg_speed = 3
-        
 
           
         #For some reason I need to store the model path in order to keep this working
@@ -280,6 +258,14 @@ class gameEngine(ShowBase):
         scoreDisplayPath = aspect2d.attachNewNode(self.scoreDisplay)
         scoreDisplayPath.setScale(0.07)
         scoreDisplayPath.setPos(-0.94,0,0.93)
+        
+        victoryDisplay = TextNode('win_msg')
+        victoryDisplay.setText('YOU WINNER!!!')
+        self.victoryDisplayPath = aspect2d.attachNewNode(victoryDisplay)
+        self.victoryDisplayPath.setScale(0.35)
+        self.victoryDisplayPath.setPos(-1.2,0,0)
+        self.victoryDisplayPath.hide()
+        
         
     def setup_skybox(self, box_space, boundry_floor):
         self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='sky2.png')
@@ -536,6 +522,9 @@ class gameEngine(ShowBase):
         self.score -= 1
         self.scoreDisplay.setText(str(self.score))
         self.egg_sounds[entry.getIntoNodePath().name].play()
+        
+        if self.score == 0:
+            self.victoryDisplayPath.show()
         
     def enable_climb(self, entry):
         self.climb = True
