@@ -268,12 +268,12 @@ class gameEngine(ShowBase):
         
         
     def setup_skybox(self, box_space, boundry_floor):
-        self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='sky2.png')
-        self.north_wall = self.generate_full_wall(box_space, box_space, 'n_wall', y=box_space/2, ry=90, img='sky.png')
-        self.south_wall = self.generate_full_wall(box_space, box_space, 's_wall', y=-box_space/2, rx=90, rz=90, ry=90, img='sky.png')
-        self.east_wall = self.generate_full_wall(box_space, box_space, 'e_wall', x=box_space/2, rz=-90, ry=90, img='sky.png')
-        self.west_wall = self.generate_full_wall(box_space, box_space, 'w_wall', x=-box_space/2, rz=90, ry=90, img='sky.png')
-        self.ceiling = self.generate_full_wall(box_space, box_space, 'ceiling', z=box_space/2, rz=180, img='sky2.png')
+        self.floor = self.generate_full_wall(box_space, box_space, 'floor', z=-boundry_floor, img='images/sky2.png')
+        self.north_wall = self.generate_full_wall(box_space, box_space, 'n_wall', y=box_space/2, ry=90, img='images/sky.png')
+        self.south_wall = self.generate_full_wall(box_space, box_space, 's_wall', y=-box_space/2, rx=90, rz=90, ry=90, img='images/sky.png')
+        self.east_wall = self.generate_full_wall(box_space, box_space, 'e_wall', x=box_space/2, rz=-90, ry=90, img='images/sky.png')
+        self.west_wall = self.generate_full_wall(box_space, box_space, 'w_wall', x=-box_space/2, rz=90, ry=90, img='images/sky.png')
+        self.ceiling = self.generate_full_wall(box_space, box_space, 'ceiling', z=box_space/2, rz=180, img='images/sky2.png')
         
     def modify_world_nodes(self, scene):
         #First, remove all objects used for reference and templates
