@@ -96,6 +96,9 @@ class gameEngine(ShowBase):
         vanishers = scene.findAllMatches('**/=Disappear')
         
 
+
+        #Add in a switch sound
+        self.switch_sound = base.loader.loadSfx('sounds\Switch_on.mp3')
             
         for egg in eggs:
             self.accept('playerCol-into-' + egg.name, self.collect_egg)
@@ -534,6 +537,7 @@ class gameEngine(ShowBase):
         
     def activate_button(self, button, entry):       
         self.reveal_objects(entry.getIntoNodePath().parent, button)
+        self.switch_sound.play()
         
     def timed_activation(self, button, timer, entry):
         key = entry.getIntoNodePath().name
